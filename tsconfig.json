@@ -3,9 +3,6 @@
   "compilerOptions": {
     // File Layout
     "rootDir": "./src",
-    "paths": {
-        "@helpers/*": ["./src/helpers/*"]
-    },
     // "outDir": "./dist",
 
     // Environment Settings
