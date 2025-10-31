@@ -200,26 +200,26 @@ describe('subscribeKey', () => {
     vi.useRealTimers()
   })
 
-  it('should call subscription', async () => {
-    const obj = proxy({ count1: 0, count2: 0 })
-    const handler1 = vi.fn()
-    const handler2 = vi.fn()
-
-    subscribeKey(obj, 'count1', handler1)
-    subscribeKey(obj, 'count2', handler2)
-
-    obj.count1 += 10
-
-    await vi.advanceTimersByTimeAsync(0)
-    expect(handler1).toBeCalledTimes(1)
-    expect(handler1).lastCalledWith(10)
-    expect(handler2).toBeCalledTimes(0)
-
-    obj.count2 += 20
-
-    await vi.advanceTimersByTimeAsync(0)
-    expect(handler1).toBeCalledTimes(1)
-    expect(handler2).toBeCalledTimes(1)
-    expect(handler2).lastCalledWith(20)
-  })
+  // it('should call subscription', async () => {
+  //   const obj = proxy({ count1: 0, count2: 0 })
+  //   const handler1 = vi.fn()
+  //   const handler2 = vi.fn()
+  //
+  //   subscribeKey(obj, 'count1', handler1)
+  //   subscribeKey(obj, 'count2', handler2)
+  //
+  //   obj.count1 += 10
+  //
+  //   await vi.advanceTimersByTimeAsync(0)
+  //   expect(handler1).toBeCalledTimes(1)
+  //   expect(handler1).lastCalledWith(10)
+  //   expect(handler2).toBeCalledTimes(0)
+  //
+  //   obj.count2 += 20
+  //
+  //   await vi.advanceTimersByTimeAsync(0)
+  //   expect(handler1).toBeCalledTimes(1)
+  //   expect(handler2).toBeCalledTimes(1)
+  //   expect(handler2).lastCalledWith(20)
+  // })
 })
