@@ -18,6 +18,10 @@ function canProxy(): boolean {
   return false;
 }
 
+function objectIs() {
+  return Object.is;
+}
+
 /* ################
  * ##### Core #####
  * ################
@@ -36,7 +40,8 @@ function createDefaultHandler<T extends object>(obj: T): ProxyHandler<T> {
 }
 
 function proxy<T extends object>(obj: T): T {
-  return obj;
+  const handlers = createDefaultHandler(obj);
+  return new Proxy(obj, handlers);
 }
 
 function subscribe<T extends object>(obj: T, handler: THandler<T>): Function {
