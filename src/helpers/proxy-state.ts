@@ -6,17 +6,23 @@ import { deepEqual } from "./deep-equal";
  */
 type THandler = (record: unknown) => void;
 type TKey = string | number | symbol;
-type TNotifyUpdateParams = [path: TKey, prevValue: unknown, newValue: unknown, originObject: object];
+type TNotifyUpdateParams = {
+  path: TKey;
+  newValue: unknown;
+  target: object;
+};
 type TNotifyUpdateFn = (params: TNotifyUpdateParams) => void;
 
 /* =============================================================================
  * Constants
  * =============================================================================
  */
-const subscribers: WeakMap<object, Map<TKey, THandler[]>> = new WeakMap();
-const objCached: WeakMap<object, boolean> = new WeakMap();
+const subscriberStore: WeakMap<object, Map<TKey, THandler[]>> = new WeakMap();
 const GET_ORIGINAL_SYMBOL = Symbol();
+const SELF_SYMBOL = Symbol("__self__");
 const objectIs = Object.is;
+let handlerBatch: Array<{ handler: THandler; record: unknown }> = [];
+let batchScheduled = false;
 
 /* =============================================================================
  * Utils
@@ -40,6 +46,38 @@ export function getOriginalObject<T extends object>(obj: T): T {
   return (
     (obj as { [GET_ORIGINAL_SYMBOL]?: typeof obj })[GET_ORIGINAL_SYMBOL] || obj
   );
+}
+
+/**
+ * Simple batching utility to dispatch all handlers efficiently
+ * Accumulates handler calls and executes them together in a microtask
+ */
+function dispatchAllHandlers(handlers: THandler[], record: unknown): void {
+  if (!handlers || handlers.length === 0) return;
+
+  // Add all handlers to the batch queue
+  for (const handler of handlers) {
+    handlerBatch.push({ handler, record });
+  }
+
+  // Schedule batch execution once per microtask cycle
+  if (!batchScheduled) {
+    batchScheduled = true;
+    Promise.resolve().then(() => {
+      const batch = handlerBatch;
+      handlerBatch = [];
+      batchScheduled = false;
+
+      // Execute all handlers in the batch
+      for (const { handler, record } of batch) {
+        try {
+          handler(record);
+        } catch (error) {
+          console.error("Error executing handler:", error);
+        }
+      }
+    });
+  }
 }
 
 /* =============================================================================
@@ -79,27 +117,49 @@ function createDefaultHandler<T extends object>(
       }
 
       // Notify subscriber to update new value
-      notifyUpdate([property, prevValue, newValue, target]);
+      notifyUpdate({
+        path: property,
+        newValue,
+        target,
+      });
 
       Reflect.set(target, property, newValue, receiver);
       return true;
     },
-    deleteProperty(target, prop) {
+    deleteProperty(target, property) {
+      Reflect.deleteProperty(target, property);
       return true;
     },
   };
 }
 
 function proxy<T extends object>(obj: T): T {
-  const subscriber = subscribers.get(obj);
+  const subscriber = subscriberStore.get(obj);
+
   // Notify update of listener
-  const notifyUpdate = () => {};
+  const notifyUpdate: TNotifyUpdateFn = (params) => {
+    const { path, newValue, target: originObject } = params;
+    const subscriber = subscriberStore.get(originObject);
+    if (subscriber) {
+      const handlers = subscriber.get(path);
+      const selfHandlers = subscriber.get(SELF_SYMBOL);
+      if (handlers && handlers.length > 0) {
+        // Dispatch all handlers with batching
+        dispatchAllHandlers(handlers, newValue);
+      }
+      if (selfHandlers && selfHandlers.length > 0) {
+        // Dispatch all self handlers with batching
+        dispatchAllHandlers(selfHandlers, originObject);
+      }
+    }
+  };
+
   // Create handler for proxied object
   const handlers = createDefaultHandler(obj, notifyUpdate);
 
   // Register object to subscribers store if it haven't registed yet
   if (!subscriber) {
-    subscribers.set(obj, new Map());
+    subscriberStore.set(obj, new Map());
   }
 
   return new Proxy(obj, handlers);
@@ -110,34 +170,34 @@ function subscribe<T extends object>(
   key: keyof T,
   handler: THandler,
 ): Function {
+  const nextValue = obj[key];
+  const originalNextValue = getOriginalObject(nextValue as T);
   const originalObject = getOriginalObject(obj);
-  const subscriber = subscribers.get(originalObject);
 
+  // Determine which symbol/key to use based on whether value is an object
+  const subscribeKey = canProxy(originalNextValue) ? SELF_SYMBOL : key;
+  const targetObject = canProxy(originalNextValue)
+    ? originalNextValue
+    : originalObject;
+
+  // Get or create subscriber map
+  let subscriber = subscriberStore.get(targetObject);
   if (!subscriber) {
-    // Immediatly return empty if subscriber is undefined
-    return () => {};
+    subscriber = new Map();
+    subscriberStore.set(targetObject, subscriber);
   }
 
   // Add handler to subscriber
-  const handlers = subscriber.get(key);
+  const handlers = subscriber.get(subscribeKey) || [];
+  handlers.push(handler);
+  subscriber.set(subscribeKey, handlers);
 
-  // Case 1: Handlers is empty or undefined
-  if (!handlers || handlers.length === 0) {
-    subscriber.set(key, [handler]);
-  }
-
-  // Case 2: Handlers contain values
-  if (handlers && handlers.length > 0) {
-    handlers.push(handler);
-    subscriber.set(key, handlers);
-  }
-
-  // Sync subscriber to store
-  subscribers.set(originalObject, subscriber);
-
+  // Return unsubscribe function
   return () => {
-    subscriber.set(key, []);
-    subscribers.set(originalObject, subscriber);
+    const subscriber = subscriberStore.get(targetObject);
+    if (subscriber) {
+      subscriber.set(subscribeKey, []);
+    }
   };
 }
 
