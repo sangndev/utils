@@ -9,19 +9,26 @@ const meta = {
 export default meta;
 
 export function Basic() {
-  const a = useRef(proxy({ count: 0, foo: { bar: "bazz" } }));
-  // subscribe(a, "count", () => {});
-  // a.count++;
+  const a = useRef(
+    proxy({ count: 0, foo: { bar: "bazz", gazz: { fi: "do" } }, arr: [1] }),
+  );
+  subscribe(a.current, "arr", (record) => console.log("arr changed: ", record));
+  subscribe(a.current, "count", () => {});
   subscribe(a.current, "foo", (record) => {
     console.log("foo changed: ", record);
   });
-  // unsubscribe();
   const unsubscribe = subscribe(a.current.foo, "bar", (record) => {
     console.log("bar changed: ", record);
   });
+  subscribe(a.current.foo.gazz, "fi", (record) =>
+    console.log("fi changed: ", record),
+  );
+  a.current.arr.push(2);
+  a.current.count++;
   a.current.foo.bar = "yayayayayaoayaoyoayoay";
-  // unsubscribe()
+  unsubscribe();
 
-  // console.log(a.count)
+  a.current.foo.gazz.fi = "nan";
+
   return <div>basic ne</div>;
 }

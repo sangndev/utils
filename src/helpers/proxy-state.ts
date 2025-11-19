@@ -35,7 +35,7 @@ function isObject(obj: object) {
 function canProxy(obj: object): boolean {
   if (
     !isObject(obj) ||
-    (obj.constructor && !["Object"].includes(obj.constructor.name))
+    (obj.constructor && !["Object", "Array"].includes(obj.constructor.name))
   ) {
     return false;
   }
@@ -97,7 +97,7 @@ function createDefaultHandler<T extends object>(
 
       const nextTarget = Reflect.get(target, prop, receiver) as object;
       if (canProxy(nextTarget)) {
-        return proxy(nextTarget);
+        return proxy(nextTarget, true);
       }
 
       return nextTarget;
@@ -133,7 +133,7 @@ function createDefaultHandler<T extends object>(
   };
 }
 
-function proxy<T extends object>(obj: T): T {
+function proxy<T extends object>(obj: T, saveToStore: boolean = false): T {
   const subscriber = subscriberStore.get(obj);
 
   // Notify update of listener
@@ -158,7 +158,7 @@ function proxy<T extends object>(obj: T): T {
   const handlers = createDefaultHandler(obj, notifyUpdate);
 
   // Register object to subscribers store if it haven't registed yet
-  if (!subscriber) {
+  if (!subscriber && saveToStore) {
     subscriberStore.set(obj, new Map());
   }
 
