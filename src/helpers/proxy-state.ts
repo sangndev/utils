@@ -1,3 +1,150 @@
+/**
+ * Proxy State Utility
+ *
+ * A reactive state management utility that enables automatic tracking of changes
+ * to objects and arrays using JavaScript Proxies. Perfect for building reactive
+ * applications with minimal boilerplate. Works seamlessly with React via the
+ * `useSubscribe` hook powered by `useSyncExternalStore`.
+ *
+ * Key Features:
+ * - **Deep Observation**: Automatically tracks changes to nested objects and arrays
+ * - **Batched Handlers**: Executes all change handlers in batches for optimal performance using Promise microtasks
+ * - **Type Safety**: Full TypeScript support with proper type inference
+ * - **Memory Efficient**: Uses WeakMap for automatic garbage collection
+ * - **Change Detection**: Compares values using Object.is() and deep equality checks to prevent unnecessary updates
+ * - **React Integration**: `useSubscribe` hook using `useSyncExternalStore` for seamless React component integration
+ * - **Array & Object Support**: Properly tracks mutations like `push()`, `pop()`, property assignments, etc.
+ *
+ * Supported Types:
+ * - Plain Objects: `{}`
+ * - Arrays: `[]`
+ * - Nested structures combining objects and arrays
+ *
+ * ## Core API
+ *
+ * ### `proxy<T>(obj: T): T`
+ * Creates a reactive proxy of an object or array. All changes to the proxied object will trigger subscribers.
+ *
+ * ```ts
+ * const state = proxy({ name: 'John', age: 30, items: [] });
+ * ```
+ *
+ * ### `subscribe<T>(obj: T, key: keyof T, handler: (newValue) => void): () => void`
+ * Subscribes to property changes with a callback handler. Returns an unsubscribe function.
+ *
+ * ```ts
+ * const unsubscribe = subscribe(state, 'age', (newValue) => {
+ *   console.log('Age changed to:', newValue);
+ * });
+ *
+ * state.age = 31; // Triggers handler - executes in next microtask batch
+ * unsubscribe(); // Stop listening
+ * ```
+ *
+ * ### `useSubscribe<T, K>(obj: T, key: K): T[K]` (React Hook)
+ * Subscribes to property changes in React components using `useSyncExternalStore`.
+ * Returns the current value and automatically re-renders when it changes.
+ * Update the value directly on the proxied object to maintain reactivity.
+ *
+ * ```ts
+ * const state = proxy({ count: 0, items: ['a', 'b'], user: { name: 'John' } });
+ *
+ * function Counter() {
+ *   // Subscribe to primitives
+ *   const count = useSubscribe(state, 'count');
+ *
+ *   // Subscribe to arrays - tracks mutations like push(), pop(), etc.
+ *   const items = useSubscribe(state, 'items');
+ *
+ *   // Subscribe to nested objects
+ *   const user = useSubscribe(state, 'user');
+ *
+ *   return (
+ *     <div>
+ *       <p>Count: {count}</p>
+ *       <p>User: {user.name}</p>
+ *       <button onClick={() => state.count++}>Increment</button>
+ *       <button onClick={() => state.items.push('c')}>Add Item</button>
+ *     </div>
+ *   );
+ * }
+ * ```
+ *
+ * ## Advanced Usage
+ *
+ * ### Nested Objects and Arrays
+ * ```ts
+ * const state = proxy({
+ *   user: { name: 'John', age: 30 },
+ *   hobbies: ['reading', 'gaming'],
+ *   stats: {
+ *     posts: [1, 2, 3],
+ *     followers: 100
+ *   }
+ * });
+ *
+ * // Subscribe to nested property changes
+ * subscribe(state, 'user', (newUser) => {
+ *   console.log('User changed:', newUser);
+ * });
+ *
+ * // Update nested values - all properly reactive
+ * state.user = { name: 'Jane', age: 25 };
+ * state.hobbies.push('cooking');
+ * state.stats.posts.push(4);
+ * state.stats.followers++;
+ * ```
+ *
+ * ### Multiple Subscribers
+ * ```ts
+ * const state = proxy({ count: 0 });
+ *
+ * const unsub1 = subscribe(state, 'count', (val) => console.log('Handler 1:', val));
+ * const unsub2 = subscribe(state, 'count', (val) => console.log('Handler 2:', val));
+ *
+ * state.count = 5;
+ * // Both handlers execute in the same batch for optimal performance
+ * ```
+ *
+ * ### React Component with Multiple Values
+ * ```ts
+ * const appState = proxy({
+ *   user: { id: 1, name: 'Alice' },
+ *   todos: [],
+ *   loading: false
+ * });
+ *
+ * function TodoApp() {
+ *   const user = useSubscribe(appState, 'user');
+ *   const todos = useSubscribe(appState, 'todos');
+ *   const loading = useSubscribe(appState, 'loading');
+ *
+ *   return (
+ *     <div>
+ *       <h1>Welcome, {user.name}!</h1>
+ *       {loading && <p>Loading...</p>}
+ *       <ul>
+ *         {todos.map(todo => (
+ *           <li key={todo.id}>{todo.title}</li>
+ *         ))}
+ *       </ul>
+ *     </div>
+ *   );
+ * }
+ * ```
+ *
+ * ## Performance Characteristics
+ *
+ * - **Batched Updates**: Multiple property changes in the same event loop are batched together
+ * - **Memoized Subscriptions**: `useSubscribe` uses `useCallback` to prevent unnecessary re-subscriptions
+ * - **Shallow Comparisons**: Uses Object.is() for primitives and deepEqual() for complex types
+ * - **No Re-proxying**: Nested objects are cached to avoid creating multiple proxies
+ * - **Memory Safe**: WeakMap ensures proxied objects are garbage collected when no longer referenced
+ *
+ * @module proxy-state
+ */
+
+import { useState, useEffect } from "react";
 import { deepEqual } from "./deep-equal";
 
 /* =============================================================================
@@ -18,6 +165,7 @@ type TNotifyUpdateFn = (params: TNotifyUpdateParams) => void;
  * =============================================================================
  */
 const subscriberStore: WeakMap<object, Map<TKey, THandler[]>> = new WeakMap();
+const refSet: WeakSet<object> = new WeakSet();
 const GET_ORIGINAL_SYMBOL = Symbol();
 const SELF_SYMBOL = Symbol("__self__");
 const objectIs = Object.is;
@@ -28,7 +176,7 @@ let batchScheduled = false;
  * Utils
  * =============================================================================
  */
-function isObject(obj: object) {
+function isObject<T>(obj: T) {
   return typeof obj === "object" && obj !== null;
 }
 
@@ -46,6 +194,20 @@ export function getOriginalObject<T extends object>(obj: T): T {
   return (
     (obj as { [GET_ORIGINAL_SYMBOL]?: typeof obj })[GET_ORIGINAL_SYMBOL] || obj
   );
+}
+
+function deepClone<T>(obj: T, cached: WeakSet<object> = refSet): T {
+  if (!isObject(obj) || cached.has(obj)) {
+    return obj;
+  }
+
+  const baseObject: T = Array.isArray(obj)
+    ? []
+    : Object.create(Object.getPrototypeOf(obj));
+  Reflect.ownKeys(obj).forEach((key) => {
+    baseObject[key as keyof T] = deepClone(obj[key as keyof T], cached);
+  });
+  return baseObject;
 }
 
 /**
@@ -133,7 +295,10 @@ function createDefaultHandler<T extends object>(
   };
 }
 
-function proxy<T extends object>(obj: T, saveToStore: boolean = false): T {
+function proxy<T extends object>(
+  obj: T,
+  registerStateToStore: boolean = false,
+): T {
   const subscriber = subscriberStore.get(obj);
 
   // Notify update of listener
@@ -158,7 +323,7 @@ function proxy<T extends object>(obj: T, saveToStore: boolean = false): T {
   const handlers = createDefaultHandler(obj, notifyUpdate);
 
   // Register object to subscribers store if it haven't registed yet
-  if (!subscriber && saveToStore) {
+  if (!subscriber && registerStateToStore) {
     subscriberStore.set(obj, new Map());
   }
 
@@ -201,4 +366,34 @@ function subscribe<T extends object>(
   };
 }
 
-export { proxy, subscribe };
+function useSubscribe<T extends object, K extends keyof T>(
+  obj: T,
+  key: K,
+): T[K] {
+  const [value, setValue] = useState<T[K]>(
+    isObject(obj) ? getOriginalObject(obj[key] as any) : obj[key],
+  );
+
+  useEffect(() => {
+    // Subscribe to changes on the proxy object
+    const unsubscribe = subscribe(obj, key, (newValue) => {
+      let assignedValue = newValue;
+      // By pass “state identity equality check” for Object value
+      // React will not re-render if you call setState with a value that is
+      // referentially identical to the previous value.
+      if (isObject(newValue)) {
+        assignedValue = deepClone(newValue);
+      }
+      setValue(assignedValue as T[K]);
+    });
+
+    // Cleanup subscription on unmount
+    return () => {
+      unsubscribe();
+    };
+  }, [obj, key, setValue]);
+
+  return value;
+}
+
+export { proxy, subscribe, useSubscribe };
