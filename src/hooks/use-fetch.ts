@@ -2,8 +2,13 @@
  * Types
  * =============================================================================
  * */
-type TFetcher = (url: string) => typeof fetch;
-type TOptions = {};
+type TKey = string | [url: string, request: RequestInit];
+type TFetcher<T> = (url: string, request?: RequestInit) => Promise<T>;
+type TOptions<T> = {
+  onSuccess?: (response: T) => void;
+  onError?: (error: Error) => void;
+  autoInvoke?: boolean;
+};
 
 /* =============================================================================
  * Constants
@@ -15,4 +20,8 @@ type TOptions = {};
  * =============================================================================
  * */
 
-export async function useFetch(url: string, fetcher: TFetcher) {}
+export function useFetch<T extends unknown>(
+  key: TKey,
+  fetcher: TFetcher<T>,
+  options?: TOptions<T>,
+) {}
