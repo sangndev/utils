@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { Meta } from "@storybook/react-vite";
-import { proxy, useSubscribe } from "../../src/helpers/proxy-state";
+import { proxy, useSubscribe } from "../../helpers/proxy-state";
 
 const meta = {
   title: "Helpers/proxy-state",
