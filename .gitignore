@@ -1,39 +1,64 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# =========================
+# Dependencies
+# =========================
+node_modules/
 
-# dependencies
-/node_modules
-/.pnp
-.pnp.js
+# =========================
+# Build outputs
+# =========================
+build/
+coverage/
 
-# testing
-/coverage
+# Types output (tsc)
+*.d.ts
+*.d.ts.map
 
-# next.js
-/.next/
-/out/
-
-# production
-/build
-
-# misc
-.DS_Store
-*.pem
-
-# debug
+# =========================
+# Logs
+# =========================
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
 
-# local env files
-.env*.local
+# =========================
+# Environment files
+# =========================
 .env
+.env.*
+!.env.example
 
-# vercel
-.vercel
+# =========================
+# Cache / tooling
+# =========================
+.cache/
+.turbo/
+.eslintcache
 
-# typescript
+# TypeScript
 *.tsbuildinfo
-next-env.d.ts
 
-*storybook.log
-storybook-static
+# =========================
+# Editor / OS
+# =========================
+.DS_Store
+Thumbs.db
+
+# VSCode
+.vscode/
+!.vscode/extensions.json
+
+# JetBrains
+.idea/
+
+# =========================
+# Storybook / Ladle
+# =========================
+.ladle/dist
+.storybook-out
+
+# =========================
+# Misc
+# =========================
+tmp/
+temp/
