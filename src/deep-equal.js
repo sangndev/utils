@@ -1,4 +1,9 @@
-export function deepEqual(a: unknown, b: unknown): boolean {
+/**
+ * @param {unknown} a 
+ * @param {unknown} b 
+ * @returns boolean
+ */
+export function deepEqual(a, b) {
   if (a === b) {
     return true;
   }
@@ -37,19 +42,17 @@ export function deepEqual(a: unknown, b: unknown): boolean {
     }
 
     for (i = length; i-- !== 0; ) {
-      if (!{}.hasOwnProperty.call(b, keys[i]!)) {
+      if (!{}.hasOwnProperty.call(b, keys[i])) {
         return false;
       }
     }
 
     for (i = length; i-- !== 0; ) {
       const key = keys[i];
-      // @ts-expect-error $$typeof is expected
       if (key === '_owner' && a.$$typeof) {
         continue;
       }
 
-      // @ts-expect-error objects are expected
       if (!deepEqual(a[key], b[key])) {
         return false;
       }
