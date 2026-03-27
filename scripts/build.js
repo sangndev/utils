@@ -1,4 +1,5 @@
 import { build } from "rolldown";
+import { writeFile } from "node:fs/promises";
 
 /** @type {string}*/
 const input = "src/index.js";
@@ -24,3 +25,6 @@ await build({
     preserveModulesRoot: "src",
   },
 });
+
+// Root package.json uses `"type": "module"`, so we need to mark CJS artifacts explicitly.
+await writeFile("dist/cjs/package.json", "{\n  \"type\": \"commonjs\"\n}\n");
