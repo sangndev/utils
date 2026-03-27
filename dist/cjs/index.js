@@ -2,6 +2,7 @@ Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
 const require_deep_equal = require("./deep-equal.js");
 const require_deep_clone = require("./deep-clone.js");
 const require_create_store = require("./create-store.js");
+exports.cloneValueStore = require_create_store.cloneValueStore;
 exports.createStore = require_create_store.createStore;
 exports.deepClone = require_deep_clone.deepClone;
 exports.deepEqual = require_deep_equal.deepEqual;

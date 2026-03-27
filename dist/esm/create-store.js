@@ -3,9 +3,27 @@ import { deepEqual } from "./deep-equal.js";
 /** @typedef {(record: unknown) => void} Handler*/
 /** @typedef {string | number | symbol} Key*/
 /** @typedef {(params: {path: Key; newValue: unknown; target: object}) => void} NotifyUpdateFn*/
+/**
+* Reactive store built on top of `Proxy`.
+*
+* - `createStore(obj)` wraps a plain object/array and returns a proxy that can
+*   track nested objects lazily (nested values are proxied on access).
+* - `subscribe(store, key, handler)` subscribes to changes:
+*   - If `store[key]` is a primitive, `handler(newValue)` is called when that
+*     property changes.
+*   - If `store[key]` is a plain object/array, `handler(targetObject)` is
+*     called when *any* nested property on that object changes.
+* - Notifications are batched per microtask to avoid redundant handler calls
+*   when multiple writes happen synchronously.
+*
+* Notes:
+* - Only plain objects and arrays are proxied (class instances are ignored).
+* - Deletes currently do not trigger notifications.
+*/
 /** @type {WeakMap<object, Map<Key, Handler[]>>}*/
 const subscriberStore = /* @__PURE__ */ new WeakMap();
-const GET_ORIGINAL = new Symbol();
+const refSet = /* @__PURE__ */ new WeakSet();
+const GET_ORIGINAL = Symbol("GET_ORIGINAL");
 const GET_SELF = Symbol("__self__");
 const objectIs = Object.is;
 /** @type {Array<{handler: Handler; record: unknown}>}*/
@@ -15,7 +33,7 @@ let batchScheduled = false;
 * @template T
 * @param {T} obj
 * @param {boolean} registerStateToStore
-* @return void
+* @returns {T}
 * */
 function createStore(obj, registerStateToStore = false) {
 	/** @type {NotifyUpdateFn} */
@@ -45,8 +63,9 @@ function subscribe(obj, key, handler) {
 	const nextValue = obj[key];
 	const nextValueOriginal = getOriginalObject(nextValue);
 	const objectOriginal = getOriginalObject(obj);
-	const subscribeKey = canProxy(nextValueOriginal) ? GET_SELF : key;
-	const target = canProxy(objectOriginal) ? nextValueOriginal : objectOriginal;
+	const normalizedKey = typeof key === "number" ? String(key) : key;
+	const subscribeKey = canProxy(nextValueOriginal) ? GET_SELF : normalizedKey;
+	const target = canProxy(nextValueOriginal) ? nextValueOriginal : objectOriginal;
 	let subscriber = subscriberStore.get(target);
 	if (!subscriber) {
 		subscriber = /* @__PURE__ */ new Map();
@@ -56,18 +75,34 @@ function subscribe(obj, key, handler) {
 	handlers.push(handler);
 	subscriber.set(subscribeKey, handlers);
 	return () => {
-		subscriber.delete(subscribeKey);
+		const list = subscriber.get(subscribeKey);
+		if (!list) return;
+		const index = list.indexOf(handler);
+		if (index !== -1) list.splice(index, 1);
+		if (list.length === 0) subscriber.delete(subscribeKey);
 	};
 }
 /**
-*  Return the plain object
-*
 * @template T
 * @param {T} obj
 * @returns {T}
 */
 function getOriginalObject(obj) {
-	return obj[GET_ORIGINAL_SYMBOL] || obj;
+	if (!isObject(obj)) return obj;
+	return obj[GET_ORIGINAL] ?? obj;
+}
+/**
+* @param {object} obj
+* @param {WeakSet<object>} [cached]
+* @returns
+*/
+function cloneValueStore(obj, cached = refSet) {
+	if (!isObject(obj) || cached.has(obj)) return obj;
+	const baseObject = Array.isArray(obj) ? [] : Object.create(Object.getPrototypeOf(obj));
+	Reflect.ownKeys(obj).forEach((key) => {
+		baseObject[key] = cloneValueStore(obj[key], cached);
+	});
+	return baseObject;
 }
 /**
 * @param {object} obj
@@ -141,6 +176,6 @@ function createDefaultHandler(obj, notifyUpdate) {
 	};
 }
 //#endregion
-export { createStore, getOriginalObject, subscribe };
+export { cloneValueStore, createStore, getOriginalObject, subscribe };
 
 //# sourceMappingURL=create-store.js.map
