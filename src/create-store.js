@@ -5,6 +5,32 @@
 /**
  * Reactive store built on top of `Proxy`.
  *
+ * ## Usage
+ *
+ * Subscribe to a primitive field:
+ *
+ * @example
+ * const state = createStore({ count: 0 })
+ * const unsubscribe = subscribe(state, 'count', (next) => {
+ *   console.log('count ->', next)
+ * })
+ *
+ * state.count = 1
+ * await Promise.resolve() // handlers run batched in a microtask
+ * unsubscribe()
+ *
+ * Subscribe to a nested object/array (handler receives the original object/array):
+ *
+ * @example
+ * const state = createStore({ user: { name: 'A' }, list: [1, 2] })
+ *
+ * subscribe(state, 'user', (user) => console.log(user.name))
+ * subscribe(state, 'list', (list) => console.log(list[0]))
+ *
+ * state.user.name = 'B' // triggers the 'user' subscription
+ * state.list[0] = 99    // triggers the 'list' subscription
+ * await Promise.resolve()
+ *
  * - `createStore(obj)` wraps a plain object/array and returns a proxy that can
  *   track nested objects lazily (nested values are proxied on access).
  * - `subscribe(store, key, handler)` subscribes to changes:
@@ -34,6 +60,15 @@ let handleBatch = []
 let batchScheduled = false
 
 /**
+ * Wrap a plain object/array in a proxy-backed store.
+ *
+ * Nested objects/arrays are proxied lazily when accessed.
+ *
+ * @example
+ * const state = createStore({ a: 1, nested: { b: 2 } })
+ * state.a = 2
+ * state.nested.b = 3
+ *
  * @template T
  * @param {T} obj
  * @param {boolean} registerStateToStore
@@ -74,6 +109,29 @@ export function createStore(obj, registerStateToStore = false) {
 }
 
 /**
+ * Subscribe to changes on `obj[key]`.
+ *
+ * Behavior depends on the current value at `key`:
+ * - Primitive (or non-proxyable object): calls `handler(newValue)` when
+ *   `obj[key]` changes.
+ * - Plain object/array: calls `handler(targetObject)` when any nested field in
+ *   that object/array changes (handler receives the original object/array).
+ *
+ * Handlers are executed in a microtask batch (multiple synchronous writes
+ * result in a single queued batch).
+ *
+ * @example
+ * const state = createStore({ count: 0, nested: { value: 0 } })
+ * const unsubCount = subscribe(state, 'count', (count) => console.log(count))
+ * const unsubNested = subscribe(state, 'nested', (nested) => console.log(nested.value))
+ *
+ * state.count = 1
+ * state.nested.value = 2
+ * await Promise.resolve()
+ *
+ * unsubCount()
+ * unsubNested()
+ *
  * @template T
  * @param {T} obj
  * @param {keyof T} key
@@ -121,6 +179,13 @@ export function subscribe(obj, key, handler) {
 }
 
 /**
+ * Return the original (non-proxy) object/array behind a store value.
+ *
+ * @example
+ * const state = createStore({ nested: { a: 1 } })
+ * const nestedProxy = state.nested
+ * const nestedOriginal = getOriginalObject(nestedProxy)
+ *
  * @template T
  * @param {T} obj
  * @returns {T}
@@ -131,6 +196,9 @@ export function getOriginalObject(obj) {
 }
 
 /**
+ * Clone a store value (object/array) while avoiding re-visiting references.
+ * Non-objects and already-seen objects are returned as-is.
+ *
  * @param {object} obj
  * @param {WeakSet<object>} [cached]
  * @returns
