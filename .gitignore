@@ -9,10 +9,6 @@ node_modules/
 build/
 coverage/
 
-# Types output (tsc)
-*.d.ts
-*.d.ts.map
-
 # =========================
 # Logs
 # =========================
