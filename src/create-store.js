@@ -85,8 +85,11 @@ export function subscribe(obj, key, handler) {
   const nextValueOriginal = getOriginalObject(nextValue)
   const objectOriginal = getOriginalObject(obj)
 
+  // JS property keys are string | symbol; array indices are passed to traps as strings.
+  const normalizedKey = typeof key === 'number' ? String(key) : key
+
   // Determine which symbol/key to use based on whether value is an object
-  const subscribeKey = canProxy(nextValueOriginal) ? GET_SELF : key
+  const subscribeKey = canProxy(nextValueOriginal) ? GET_SELF : normalizedKey
   const target = canProxy(nextValueOriginal)
     ? nextValueOriginal
     : objectOriginal
@@ -118,8 +121,6 @@ export function subscribe(obj, key, handler) {
 }
 
 /**
- *  Return the plain object
- *
  * @template T
  * @param {T} obj
  * @returns {T}
@@ -127,6 +128,27 @@ export function subscribe(obj, key, handler) {
 export function getOriginalObject(obj) {
   if (!isObject(obj)) return obj
   return obj[GET_ORIGINAL] ?? obj
+}
+
+/**
+ * @param {object} obj
+ * @param {WeakSet<object>} [cached]
+ * @returns
+ */
+export function cloneValueStore(obj, cached = refSet) {
+  if (!isObject(obj) || cached.has(obj)) {
+    return obj
+  }
+
+  const baseObject = Array.isArray(obj)
+    ? []
+    : Object.create(Object.getPrototypeOf(obj))
+
+  Reflect.ownKeys(obj).forEach((key) => {
+    baseObject[key] = cloneValueStore(obj[key], cached)
+  })
+
+  return baseObject
 }
 
 /**
@@ -149,27 +171,6 @@ function canProxy(obj) {
     return false
   }
   return true
-}
-
-/**
- * @param {object} obj
- * @param {WeakSet<object>} [cached]
- * @returns
- */
-function deepClone(obj, cached = refSet) {
-  if (!isObject(obj) || cached.has(obj)) {
-    return obj
-  }
-
-  const baseObject = Array.isArray(obj)
-    ? []
-    : Object.create(Object.getPrototypeOf(obj))
-
-  Reflect.ownKeys(obj).forEach((key) => {
-    baseObject[key] = deepClone(obj[key], cached)
-  })
-
-  return baseObject
 }
 
 /**

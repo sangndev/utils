@@ -77,3 +77,34 @@ test('getOriginalObject returns the underlying target for proxies', () => {
   assert.equal(getOriginalObject(original), original)
 })
 
+test('subscribe (array) notifies on index assignment and passes the original array', async () => {
+  const state = createStore({ list: [1, 2, 3] })
+
+  /** @type {any} */
+  let record
+  let calls = 0
+  subscribe(state, 'list', (arr) => {
+    calls++
+    record = arr
+  })
+
+  state.list[1] = 42
+  await flushBatches()
+
+  assert.equal(calls, 1)
+  assert.equal(record[1], 42)
+  assert.equal(record, getOriginalObject(state.list))
+})
+
+test('createStore can wrap arrays directly and subscribe to indices', async () => {
+  const list = createStore([10, 20])
+
+  /** @type {unknown[]} */
+  const records = []
+  subscribe(list, 0, (value) => records.push(value))
+
+  list[0] = 99
+  await flushBatches()
+
+  assert.deepEqual(records, [99])
+})
