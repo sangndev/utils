@@ -13,8 +13,13 @@
   "exports": {
     ".": {
       "import": "./dist/esm/index.js",
-      "require": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js",
       "types": "./dist/types/index.d.ts"
+    },
+    "./*": {
+      "import": "./dist/esm/*.js",
+      "require": "./dist/cjs/*.js",
+      "types": "./dist/types/*.d.ts"
     }
   },
   "devDependencies": {
@@ -28,7 +33,8 @@
   ],
   "scripts": {
     "generate-types": "tsc -p tsconfig.json",
-    "build": "rm -rf /dist && node scripts/build.js && yarn generate-types",
+    "build": "rm -rf dist && node scripts/build.js && yarn generate-types",
+    "prepack": "yarn build",
     "test": "node --test"
   }
 }
