@@ -223,7 +223,7 @@ export function cloneValueStore(obj, cached = refSet) {
  * @param {object} obj
  * @returns boolean
  */
-function isObject(obj) {
+export function isObject(obj) {
   return typeof obj === 'object' && obj !== null
 }
 
