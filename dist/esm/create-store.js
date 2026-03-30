@@ -244,6 +244,6 @@ function createDefaultHandler(obj, notifyUpdate) {
 	};
 }
 //#endregion
-export { cloneValueStore, createStore, getOriginalObject, subscribe };
+export { cloneValueStore, createStore, getOriginalObject, isObject, subscribe };
 
 //# sourceMappingURL=create-store.js.map

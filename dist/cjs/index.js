@@ -7,4 +7,5 @@ exports.createStore = require_create_store.createStore;
 exports.deepClone = require_deep_clone.deepClone;
 exports.deepEqual = require_deep_equal.deepEqual;
 exports.getOriginalObject = require_create_store.getOriginalObject;
+exports.isObject = require_create_store.isObject;
 exports.subscribe = require_create_store.subscribe;

@@ -247,6 +247,7 @@ function createDefaultHandler(obj, notifyUpdate) {
 exports.cloneValueStore = cloneValueStore;
 exports.createStore = createStore;
 exports.getOriginalObject = getOriginalObject;
+exports.isObject = isObject;
 exports.subscribe = subscribe;
 
 //# sourceMappingURL=create-store.js.map
