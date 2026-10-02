@@ -166,6 +166,7 @@ function getOriginalObject(obj) {
 */
 function cloneValueStore(obj, cached = refSet) {
 	if (!isObject(obj) || cached.has(obj)) return obj;
+	cached.add(obj);
 	const baseObject = Array.isArray(obj) ? [] : Object.create(Object.getPrototypeOf(obj));
 	Reflect.ownKeys(obj).forEach((key) => {
 		baseObject[key] = cloneValueStore(obj[key], cached);

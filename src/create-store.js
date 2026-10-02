@@ -207,6 +207,7 @@ export function cloneValueStore(obj, cached = refSet) {
   if (!isObject(obj) || cached.has(obj)) {
     return obj
   }
+  cached.add(obj)
 
   const baseObject = Array.isArray(obj)
     ? []
