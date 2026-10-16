@@ -20,3 +20,43 @@ function buildStorage(storage, options) {
     has: storage.has
   }
 }
+
+/**
+ * @template Ctx
+ * @typedef {(context: Ctx) => Promise<Ctx> | Ctx} MiddlewareFn
+ * */
+
+/**
+ * @template T
+ * @param {MiddlewareFn[]} middlewares
+ * @param {T} ctx
+ * @returns {T}
+ * */
+function walkMiddlewares(middlewares, ctx) {
+  return middlewares.reduce((acc, curr) => {
+    const lastCtx = curr(acc)
+    if (typeof lastCtx === 'undefined')
+      throw new Error('Some middlewares not return anything')
+    return lastCtx
+  }, ctx)
+}
+
+/**
+ * @param {string} url
+ * @param {Record<string, string>} queryParams
+ * */
+function getPath(url, queryParams) {
+  const queryParamKeys = Object.keys(queryParams ?? {})
+  if (queryParamKeys.length === 0) return url
+
+  const _url = new URL(url)
+  const origin = _url.origin
+  const searchParams = _url.searchParams
+
+  queryParamKeys.forEach((key) => {
+    searchParams.set(key, queryParams[key])
+  })
+  return origin + '?' + searchParams.toString()
+}
+
+export { walkMiddlewares, getPath }

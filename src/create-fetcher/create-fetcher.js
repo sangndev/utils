@@ -25,18 +25,43 @@
  *	})
  */
 
+import { getPath, walkMiddlewares } from './utils.js'
+
+/** @typedef {Omit<RequestInit, 'method'>} FetcherRequestInit */
+
 /**
  * @typedef {Object} FetcherConfigs
  * @property {string} [baseUrl]
  * @property {(key: string, data: any) => Promise<void> | void} [onSuccess]
  * @property {(key: string, error: Error) => Promise<void> | void} [onError]
- * @property {Array<import('./create-fetcher-middleware.js').FetcherMiddleware>} [use]
+ * @property {Array<import('./utils.js').MiddlewareFn<FetcherRequestInit>} [use]
  * @property {unknown} [cache]
  * */
 /** @param {FetcherConfigs} configs  */
 function createFetcher(configs) {
-  async function queryFunction() {}
-  async function mutateFunction() {}
+  const { baseUrl = '', use = [], onSuccess, onError } = configs ?? {}
+  /**
+   * @param {string} url
+   * @param {FetcherRequestInit & {
+   *	queryParam?: Record<string, string | number>
+   * }} req
+   * */
+  async function queryFunction(url, req) {
+    try {
+      const { queryParam, ...restRequest } = req
+      const fullUrl = getPath(baseUrl + url, req.queryParam)
+      const _configs = walkMiddlewares(use, restRequest)
+
+      const response = fetch(fullUrl, {
+        method,
+        ..._configs
+      })
+    } catch (error) {
+      if (onError) onError(fullHref, error)
+      throw error
+    }
+  }
+  async function mutateFunction(method) {}
   return {
     get: queryFunction,
     post: mutateFunction,
