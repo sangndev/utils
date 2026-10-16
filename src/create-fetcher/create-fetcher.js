@@ -50,11 +50,11 @@ function createFetcher(configs) {
     try {
       const { queryParam, ...restRequest } = req
       const fullUrl = getPath(baseUrl + url, req.queryParam)
-      const _configs = walkMiddlewares(use, restRequest)
+      const lastConfigs = walkMiddlewares(use, restRequest)
 
-      const response = fetch(fullUrl, {
+      const response = await fetch(fullUrl, {
         method,
-        ..._configs
+        ...lastConfigs
       })
     } catch (error) {
       if (onError) onError(fullHref, error)
