@@ -30,13 +30,13 @@ function buildStorage(storage, options) {
  * @template T
  * @param {MiddlewareFn[]} middlewares
  * @param {T} ctx
- * @returns {T}
+ * @returns {Promise<T>}
  * */
-function walkMiddlewares(middlewares, ctx) {
-  return middlewares.reduce((acc, curr) => {
-    const lastCtx = curr(acc)
+async function walkMiddlewares(middlewares, ctx) {
+  return middlewares.reduce(async (acc, curr) => {
+    const lastCtx = await curr(acc)
     if (typeof lastCtx === 'undefined')
-      throw new Error('Some middlewares not return anything')
+      throw new Error('Some middlewares not return the config')
     return lastCtx
   }, ctx)
 }

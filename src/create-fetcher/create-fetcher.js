@@ -44,24 +44,40 @@ function createFetcher(configs) {
    * @param {string} url
    * @param {FetcherRequestInit & {
    *	queryParam?: Record<string, string | number>
+   *	[key: string]: any
    * }} req
    * */
   async function queryFunction(url, req) {
+    const { queryParam, ...restRequest } = req
+    const fullUrl = getPath(baseUrl + url, req.queryParam)
+
     try {
-      const { queryParam, ...restRequest } = req
-      const fullUrl = getPath(baseUrl + url, req.queryParam)
-      const lastConfigs = walkMiddlewares(use, restRequest)
+      const lastConfigs = await walkMiddlewares(use, restRequest)
 
       const response = await fetch(fullUrl, {
-        method,
+        method: 'GET',
         ...lastConfigs
       })
+
+      if (!response.ok) {
+        throw response
+      }
+      const data = await response.json()
+      if (onSuccess(fullUrl)) return data
     } catch (error) {
-      if (onError) onError(fullHref, error)
+      if (onError) onError(fullUrl, error)
       throw error
     }
   }
-  async function mutateFunction(method) {}
+  /**
+   * @param {"POST" | "PUT" | "DELETE"} method
+   * */
+  async function mutateFunction(method) {
+    //
+    return function(url, req) {
+
+    }
+  }
   return {
     get: queryFunction,
     post: mutateFunction,
