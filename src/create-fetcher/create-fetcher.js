@@ -32,40 +32,64 @@ import { getPath, walkMiddlewares } from './utils.js'
 /**
  * @typedef {Object} FetcherConfigs
  * @property {string} [baseUrl]
+ * @property {number} [timeout]
  * @property {(key: string, data: any) => Promise<void> | void} [onSuccess]
- * @property {(key: string, error: Error) => Promise<void> | void} [onError]
+ * @property {(key: string, error: Error | Response) => Promise<void> | void} [onError]
  * @property {Array<import('./utils.js').MiddlewareFn<FetcherRequestInit>} [use]
  * @property {unknown} [cache]
  * */
 /** @param {FetcherConfigs} configs  */
 function createFetcher(configs) {
-  const { baseUrl = '', use = [], onSuccess, onError } = configs ?? {}
+  const {
+    baseUrl = '',
+    use = [],
+    onSuccess,
+    onError,
+    timeout = 60 * 1000 /* 1 minute */
+  } = configs ?? {}
+  /** @typedef { string | {key: string; url: string }} FirstArg */
   /**
-   * @param {string} url
+   * @param {FirstArg} arg1
    * @param {FetcherRequestInit & {
    *	queryParam?: Record<string, string | number>
+   *	timeout?: number
    *	[key: string]: any
    * }} req
    * */
-  async function queryFunction(url, req) {
+  async function queryFunction(arg1, req) {
     const { queryParam, ...restRequest } = req
-    const fullUrl = getPath(baseUrl + url, req.queryParam)
+
+    const isObj = typeof arg1 === 'object' && arg1 !== null
+    const path = isObj ? arg1.url : arg1
+    const url = getPath(baseUrl + path, req.queryParam)
+    const key = isObj ? arg1.key : url
+
+    if (typeof arg1 === 'object') {
+      key = arg1.key
+    }
 
     try {
-      const lastConfigs = await walkMiddlewares(use, restRequest)
+      const {
+        signal,
+        timeout: lTimeout,
+        ...lastConfigs
+      } = await walkMiddlewares(use, restRequest)
 
-      const response = await fetch(fullUrl, {
+      const timeoutSignal = AbortSignal.timeout(lTimeout ? lTimeout : timeout)
+
+      const response = await fetch(url, {
         method: 'GET',
+        signal: AbortSignal.any([timeoutSignal, signal]),
         ...lastConfigs
       })
 
       if (!response.ok) {
         throw response
       }
-      const data = await response.json()
-      if (onSuccess(fullUrl)) return data
+      if (onSuccess) onSuccess(key, response)
+      return response
     } catch (error) {
-      if (onError) onError(fullUrl, error)
+      if (onError) onError(key, error)
       throw error
     }
   }
@@ -73,11 +97,9 @@ function createFetcher(configs) {
    * @param {"POST" | "PUT" | "DELETE"} method
    * */
   async function mutateFunction(method) {
-    //
-    return function(url, req) {
-
-    }
+    return function (url, req) {}
   }
+
   return {
     get: queryFunction,
     post: mutateFunction,
@@ -85,8 +107,5 @@ function createFetcher(configs) {
     delete: queryFunction
   }
 }
-
-/** @param {FetcherConfigs} configs */
-function setupConfigs(configs) {}
 
 export { createFetcher }
