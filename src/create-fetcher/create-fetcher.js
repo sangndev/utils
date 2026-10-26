@@ -26,33 +26,36 @@
  */
 
 import { getPath, walkMiddlewares } from './utils.js'
+import { merge } from '../simple-merge.js'
 
 /** @typedef {{parsedData: any; response: Response}} FetcherResponse */
+/** @typedef {Omit<RequestInit, 'method'> & {queryParams?: Record<string, string | number>; timeout?:number; json?: Record<string, any>; [key:string]:any}} Request */
 /**
  * @typedef {Object} Configs
  * @property {string} [baseUrl]
  * @property {number} [timeout]
  * @property {(key: string, response: FetcherResponse) => Promise<void> | void} [onSuccess]
  * @property {(key: string, error: Error | Response) => Promise<void> | void} [onError]
- * @property {Array<import('./utils.js').MiddlewareFn<FetcherRequestInit>} [use]
+ * @property {Array<import('./utils.js').MiddlewareFn<Request>} [use]
  * @property {Map<string, any>} [cache]
  * */
 /** @param {Configs} configs  */
-function createFetcher(configs) {
-  let { baseUrl, cache, onError, onSuccess, timeout, use } = configs
-  // 1. Initialize configs
+function createFetcher(configs = {}) {
+  let { baseUrl, cache, onError, onSuccess, timeout, use, queryParams } =
+    configs
+  // Initialize configs
   baseUrl = baseUrl ?? ''
   cache = cache ?? new Map()
   onError = onError ?? (() => {})
   onSuccess = onSuccess ?? (() => {})
   timeout = timeout ?? 30_000 // half a minutes
   use = use ?? []
+  queryParams = queryParams ?? {}
 
   /** @param {"GET" | "POST" | "PUT" | "PATCH" | "DELETE"} method */
   function createMethod(method) {
     let timeoutController
     /** @typedef { string | {key: string; url: string }} Url */
-    /** @typedef {Omit<RequestInit, 'method'> & {queryParams?: Record<string, string | number>; timeout?:number; json?: Record<string, any>; [key:string]:any}} Request */
     /**
      * @param {Url} url
      * @param {Request} request
@@ -63,20 +66,18 @@ function createFetcher(configs) {
         timeout: _timeout,
         json,
         body,
-        queryParams,
+        queryParams: _queryParams,
         signal,
         ...restRequest
-      } = request ?? {}
+      } = await walkMiddlewares(use, request ?? {})
       _timeout = _timeout ?? timeout
       body = json ? JSON.stringify(json) : body
-      queryParams = queryParams ?? {}
+      _queryParams = merge(queryParams, _queryParams ?? {})
 
       const isObject = typeof url === 'object'
       const path = isObject ? url.url : url
-      const parsedUrl = getPath(baseUrl + path, queryParams)
+      const parsedUrl = getPath(baseUrl + path, _queryParams)
       const key = isObject ? url.key : parsedUrl
-
-      const lastRequest = await walkMiddlewares(use, restRequest)
 
       const timeoutSignal = AbortSignal.timeout(_timeout)
       const combinedSignal = [timeoutSignal]
@@ -89,7 +90,7 @@ function createFetcher(configs) {
           method: method,
           signal: AbortSignal.any(combinedSignal),
           body: body,
-          ...lastRequest
+          ...restRequest
         })
         if (!response.ok) {
           throw response
@@ -116,7 +117,11 @@ function createFetcher(configs) {
     }
   }
   return {
-    get: createMethod('GET')
+    get: createMethod('GET'),
+    post: createMethod('POST'),
+    put: createMethod('PUT'),
+    patch: createMethod('PATCH'),
+    delete: createMethod('DELETE')
   }
 }
 

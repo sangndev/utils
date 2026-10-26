@@ -33,6 +33,7 @@ function buildStorage(storage, options) {
  * @returns {Promise<T>}
  * */
 async function walkMiddlewares(middlewares, ctx) {
+  if (!middlewares || (middlewares && middlewares.length === 0)) return ctx
   let result = ctx
   for (const middleware of middlewares) {
     const next = await middleware(result)
