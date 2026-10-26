@@ -27,84 +27,96 @@
 
 import { getPath, walkMiddlewares } from './utils.js'
 
-/** @typedef {Omit<RequestInit, 'method'>} FetcherRequestInit */
-
+/** @typedef {{parsedData: any; response: Response}} FetcherResponse */
 /**
- * @typedef {Object} FetcherConfigs
+ * @typedef {Object} Configs
  * @property {string} [baseUrl]
  * @property {number} [timeout]
- * @property {(key: string, data: any) => Promise<void> | void} [onSuccess]
+ * @property {(key: string, response: FetcherResponse) => Promise<void> | void} [onSuccess]
  * @property {(key: string, error: Error | Response) => Promise<void> | void} [onError]
  * @property {Array<import('./utils.js').MiddlewareFn<FetcherRequestInit>} [use]
- * @property {unknown} [cache]
+ * @property {Map<string, any>} [cache]
  * */
-/** @param {FetcherConfigs} configs  */
+/** @param {Configs} configs  */
 function createFetcher(configs) {
-  const {
-    baseUrl = '',
-    use = [],
-    onSuccess,
-    onError,
-    timeout = 60 * 1000 /* 1 minute */
-  } = configs ?? {}
-  /** @typedef { string | {key: string; url: string }} FirstArg */
-  /**
-   * @param {FirstArg} arg1
-   * @param {FetcherRequestInit & {
-   *	queryParam?: Record<string, string | number>
-   *	timeout?: number
-   *	[key: string]: any
-   * }} req
-   * */
-  async function queryFunction(arg1, req) {
-    const { queryParam, ...restRequest } = req
+  let { baseUrl, cache, onError, onSuccess, timeout, use } = configs
+  // 1. Initialize configs
+  baseUrl = baseUrl ?? ''
+  cache = cache ?? new Map()
+  onError = onError ?? (() => {})
+  onSuccess = onSuccess ?? (() => {})
+  timeout = timeout ?? 30_000 // half a minutes
+  use = use ?? []
 
-    const isObj = typeof arg1 === 'object' && arg1 !== null
-    const path = isObj ? arg1.url : arg1
-    const url = getPath(baseUrl + path, req.queryParam)
-    const key = isObj ? arg1.key : url
-
-    if (typeof arg1 === 'object') {
-      key = arg1.key
-    }
-
-    try {
-      const {
+  /** @param {"GET" | "POST" | "PUT" | "PATCH" | "DELETE"} method */
+  function createMethod(method) {
+    let timeoutController
+    /** @typedef { string | {key: string; url: string }} Url */
+    /** @typedef {Omit<RequestInit, 'method'> & {queryParams?: Record<string, string | number>; timeout?:number; json?: Record<string, any>; [key:string]:any}} Request */
+    /**
+     * @param {Url} url
+     * @param {Request} request
+     * @return {Promise<FetcherResponse>}
+     * */
+    return async function (url, request) {
+      let {
+        timeout: _timeout,
+        json,
+        body,
+        queryParams,
         signal,
-        timeout: lTimeout,
-        ...lastConfigs
-      } = await walkMiddlewares(use, restRequest)
+        ...restRequest
+      } = request ?? {}
+      _timeout = _timeout ?? timeout
+      body = json ? JSON.stringify(json) : body
+      queryParams = queryParams ?? {}
 
-      const timeoutSignal = AbortSignal.timeout(lTimeout ? lTimeout : timeout)
+      const isObject = typeof url === 'object'
+      const path = isObject ? url.url : url
+      const parsedUrl = getPath(baseUrl + path, queryParams)
+      const key = isObject ? url.key : parsedUrl
 
-      const response = await fetch(url, {
-        method: 'GET',
-        signal: AbortSignal.any([timeoutSignal, signal]),
-        ...lastConfigs
-      })
+      const lastRequest = await walkMiddlewares(use, restRequest)
 
-      if (!response.ok) {
-        throw response
+      const timeoutSignal = AbortSignal.timeout(_timeout)
+      const combinedSignal = [timeoutSignal]
+      if (signal) {
+        combinedSignal.push(signal)
       }
-      if (onSuccess) onSuccess(key, response)
-      return response
-    } catch (error) {
-      if (onError) onError(key, error)
-      throw error
+
+      try {
+        const response = await fetch(parsedUrl, {
+          method: method,
+          signal: AbortSignal.any(combinedSignal),
+          body: body,
+          ...lastRequest
+        })
+        if (!response.ok) {
+          throw response
+        }
+        const data = await response.json()
+        const result = {
+          parsedData: data,
+          response
+        }
+        onSuccess(key, result)
+
+        if (method === 'GET') {
+          //TODO: cache data into store (implement later)
+        }
+
+        return result
+      } catch (error) {
+        onError(key, error)
+        return {
+          parsedData: null,
+          response: null
+        }
+      }
     }
   }
-  /**
-   * @param {"POST" | "PUT" | "DELETE"} method
-   * */
-  async function mutateFunction(method) {
-    return function (url, req) {}
-  }
-
   return {
-    get: queryFunction,
-    post: mutateFunction,
-    put: mutateFunction,
-    delete: queryFunction
+    get: createMethod('GET')
   }
 }
 

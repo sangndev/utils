@@ -1,4 +1,4 @@
 export * from './deep-equal.js'
 export * from './deep-clone.js'
 export * from './create-store.js'
-export * from './create-fetcher'
+export * from './create-fetcher/create-fetcher.js'

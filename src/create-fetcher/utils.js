@@ -33,12 +33,15 @@ function buildStorage(storage, options) {
  * @returns {Promise<T>}
  * */
 async function walkMiddlewares(middlewares, ctx) {
-  return middlewares.reduce(async (acc, curr) => {
-    const lastCtx = await curr(acc)
-    if (typeof lastCtx === 'undefined')
-      throw new Error('Some middlewares not return the config')
-    return lastCtx
-  }, ctx)
+  let result = ctx
+  for (const middleware of middlewares) {
+    const next = await middleware(result)
+    if (typeof result === 'undefined') {
+      throw new Error('Some of middlewares not return the context')
+    }
+    result = next
+  }
+  return result
 }
 
 /**
